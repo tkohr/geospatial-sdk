@@ -30,9 +30,42 @@ import {
   WmtsEndpoint,
 } from "@camptocamp/ogc-client";
 import { MapboxVectorLayer } from "ol-mapbox-style";
+import { ImageTile, Tile } from "ol";
+import BaseEvent from "ol/events/Event";
+import TileState from 'ol/TileState.js';
+
+export class TileLoadErrorEvent extends BaseEvent {
+  statusCode: number
+
+  constructor(type: string, statusCode: number) {
+    super(type)
+    this.statusCode = statusCode
+  }
+}
 
 const GEOJSON = new GeoJSON();
 const WFS_MAX_FEATURES = 10000;
+
+function handleError(statusCode: number, tile: Tile) {
+  const errorEvent = new TileLoadErrorEvent('tileloaderrorcustom', statusCode);
+  tile.dispatchEvent(errorEvent);
+  tile.setState(TileState.ERROR);
+}
+
+function tileLoadFunction(tile: Tile, src: string) {
+  fetch(src).then((response) => {
+    if (response.status === 200) {
+      response.blob().then((blob) => {
+            ((tile as ImageTile).getImage() as HTMLImageElement).src = URL.createObjectURL(blob);
+      }).catch((error) => {
+        console.error("Error loading tile", error);
+        handleError(response.status, tile)
+      });
+    } else {
+      handleError(response.status, tile)
+    }
+  })
+}
 
 export async function createLayer(layerModel: MapContextLayer): Promise<Layer> {
   const { type } = layerModel;
@@ -46,19 +79,26 @@ export async function createLayer(layerModel: MapContextLayer): Promise<Layer> {
         }),
       });
       break;
-    case "wms":
+    case "wms": {
+      const source = new TileWMS({
+        url: removeSearchParams(layerModel.url, ["request", "service"]),
+        params: {
+          LAYERS: layerModel.name,
+          ...(layerModel.style && { STYLES: layerModel.style }),
+        },
+        gutter: 20,
+        attributions: layerModel.attributions,
+        tileLoadFunction: tileLoadFunction,
+      });
+      source.on('tileloaderrorcustom' as any, (event: BaseEvent) => {
+        const statusCode = (event as TileLoadErrorEvent).statusCode;
+        console.error(`Tile load error - HTTP status: ${statusCode}`);
+      });
       layer = new TileLayer({
-        source: new TileWMS({
-          url: removeSearchParams(layerModel.url, ["request", "service"]),
-          params: {
-            LAYERS: layerModel.name,
-            ...(layerModel.style && { STYLES: layerModel.style }),
-          },
-          gutter: 20,
-          attributions: layerModel.attributions,
-        }),
+        source: source
       });
       break;
+    }
     case "wmts": {
       const olLayer = new TileLayer({});
       const endpoint = new WmtsEndpoint(layerModel.url);
