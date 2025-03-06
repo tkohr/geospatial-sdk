@@ -43,26 +43,37 @@ export class TileLoadErrorEvent extends BaseEvent {
   }
 }
 
+export class TileWMSWithErrorHandler extends TileWMS {
+  constructor(options: any) {
+    super(options)
+
+    this.setTileLoadFunction((tile: Tile, src: string) => {
+      return tileLoadFunction(tile, src, this)
+    })
+  }
+
+  handleError(statusCode: number, tile: Tile) {
+    tile.setState(TileState.ERROR)
+    this.dispatchEvent(
+      new TileLoadErrorEvent('tileloaderrorcustom', statusCode)
+    )
+  }
+}
+
 const GEOJSON = new GeoJSON();
 const WFS_MAX_FEATURES = 10000;
 
-function handleError(statusCode: number, tile: Tile) {
-  const errorEvent = new TileLoadErrorEvent('tileloaderrorcustom', statusCode);
-  tile.dispatchEvent(errorEvent);
-  tile.setState(TileState.ERROR);
-}
-
-function tileLoadFunction(tile: Tile, src: string) {
+function tileLoadFunction(tile: Tile, src: string, source: TileWMSWithErrorHandler) {
   fetch(src).then((response) => {
     if (response.status === 200) {
       response.blob().then((blob) => {
             ((tile as ImageTile).getImage() as HTMLImageElement).src = URL.createObjectURL(blob);
       }).catch((error) => {
         console.error("Error loading tile", error);
-        handleError(response.status, tile)
+        source.handleError(response.status, tile)
       });
     } else {
-      handleError(response.status, tile)
+      source.handleError(response.status, tile)
     }
   })
 }
@@ -80,7 +91,7 @@ export async function createLayer(layerModel: MapContextLayer): Promise<Layer> {
       });
       break;
     case "wms": {
-      const source = new TileWMS({
+      const source = new TileWMSWithErrorHandler({
         url: removeSearchParams(layerModel.url, ["request", "service"]),
         params: {
           LAYERS: layerModel.name,
@@ -88,7 +99,6 @@ export async function createLayer(layerModel: MapContextLayer): Promise<Layer> {
         },
         gutter: 20,
         attributions: layerModel.attributions,
-        tileLoadFunction: tileLoadFunction,
       });
       source.on('tileloaderrorcustom' as any, (event: BaseEvent) => {
         const statusCode = (event as TileLoadErrorEvent).statusCode;
