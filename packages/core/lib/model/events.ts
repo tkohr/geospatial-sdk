@@ -22,4 +22,11 @@ export interface MapEventsByType {
   [FeaturesClickEventType]: FeaturesClickEvent;
   [FeaturesHoverEventType]: FeaturesHoverEvent;
   [MapClickEventType]: MapClickEvent;
+  [SourceLoadError]: SourceLoadErrorEvent;
+}
+
+export const SourceLoadError = "tileloaderrorcustom";
+export interface SourceLoadErrorEvent {
+  type: typeof SourceLoadError;
+  statusCode: number;
 }

@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import Map from 'ol/Map'
-import { applyContextDiffToMap, createMapFromContext } from '@geospatial-sdk/openlayers'
+import { applyContextDiffToMap, createMapFromContext, listen } from '@geospatial-sdk/openlayers'
 import { computeMapContextDiff, getLayerPosition, type MapContextLayer } from '@geospatial-sdk/core'
 import ButtonSimple from '@/components/ButtonSimple.vue'
+import Panel from '@/components/Panel.vue'
 import { DEFAULT_CONTEXT } from '@/constants'
 
 const Layers: Record<string, MapContextLayer> = {
   wms1: {
     type: 'wms',
-    url: 'https://data.geopf.fr/wms-r/wms',
+    url: 'https://data.geopf.fr/private/wms-r',
     name: 'INSEE.FILOSOFI.POPULATION'
   },
   wms2: {
@@ -31,9 +32,11 @@ let layerStates = ref({
   wms2: false,
   xyz: false
 })
+let errorCode = ref<number | null>(null)
 
 onMounted(async () => {
   map = await createMapFromContext(context, mapRoot.value)
+  listen(map, 'tileloaderrorcustom', (event) => (errorCode.value = event.statusCode))
 })
 
 async function toggleLayer(layer: 'wms1' | 'wms2' | 'xyz') {
@@ -53,6 +56,12 @@ async function toggleLayer(layer: 'wms1' | 'wms2' | 'xyz') {
 
 <template>
   <div ref="mapRoot" class="w-full h-full relative">
+    <div class="absolute top-3 right-3 flex flex-col gap-3 z-50 w-56">
+      <Panel v-if="errorCode">
+        <strong>The source responded with error code: </strong>
+        {{ errorCode }}
+      </Panel>
+    </div>
     <div class="absolute inset-x-4 bottom-4 flex flex-row gap-4 z-50">
       <ButtonSimple class="shadow-sm" @click="toggleLayer('wms1')">
         {{ layerStates['wms1'] ? 'Remove' : 'Add' }} layer over France

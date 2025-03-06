@@ -100,10 +100,6 @@ export async function createLayer(layerModel: MapContextLayer): Promise<Layer> {
         gutter: 20,
         attributions: layerModel.attributions,
       });
-      source.on('tileloaderrorcustom' as any, (event: BaseEvent) => {
-        const statusCode = (event as TileLoadErrorEvent).statusCode;
-        console.error(`Tile load error - HTTP status: ${statusCode}`);
-      });
       layer = new TileLayer({
         source: source
       });

@@ -4,6 +4,7 @@ import {
   FeaturesHoverEventType,
   MapClickEventType,
   MapEventsByType,
+  SourceLoadError,
 } from "@geospatial-sdk/core";
 import { toLonLat } from "ol/proj";
 import GeoJSON from "ol/format/GeoJSON";
@@ -17,6 +18,7 @@ import Layer from "ol/layer/Layer";
 import { Pixel } from "ol/pixel";
 import type { Feature, FeatureCollection } from "geojson";
 import throttle from "lodash.throttle";
+import { TileWMSWithErrorHandler } from "./create-map";
 
 const GEOJSON = new GeoJSON();
 
@@ -150,6 +152,27 @@ export function listen<T extends keyof MapEventsByType>(
           type: "map-click",
           coordinate,
         });
+      });
+      break;
+    case SourceLoadError:
+      //attach event listener to all existing layers
+      map.getLayers().forEach((layer) => {
+        const source = (layer as Layer<ImageWMS | TileWMS>).getSource();
+        if (source instanceof TileWMSWithErrorHandler) {
+          source.on(SourceLoadError as any, (event: BaseEvent) => {
+            (callback as (event: unknown) => void)(event);
+          });
+        }
+      });
+      //attach event listener to future layers
+      map.getLayers().on("add", (event) => {
+        const layer = (event as any).element as Layer;
+        const source = layer.getSource();
+        if (source instanceof TileWMSWithErrorHandler) {
+          source.on(SourceLoadError as any, (event: BaseEvent) => {
+            (callback as (event: unknown) => void)(event);
+          });
+        }
       });
       break;
     default:
